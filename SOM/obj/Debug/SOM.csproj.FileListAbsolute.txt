@@ -1,0 +1,12 @@
+E:\him\URL\som\SOM\SOM\bin\SOM.dll.config
+E:\him\URL\som\SOM\SOM\bin\SOM.dll
+E:\him\URL\som\SOM\SOM\bin\SOM.pdb
+E:\him\URL\som\SOM\SOM\obj\Debug\SOM.csproj.CoreCompileInputs.cache
+E:\him\URL\som\SOM\SOM\obj\Debug\SOM.csproj.CopyComplete
+E:\him\URL\som\SOM\SOM\obj\Debug\SOM.dll
+E:\him\URL\som\SOM\SOM\obj\Debug\SOM.pdb
+E:\him\URL\som\SOM\SOM\bin\AjaxControlToolkit.dll
+E:\him\URL\som\SOM\SOM\bin\HtmlAgilityPack.dll
+E:\him\URL\som\SOM\SOM\bin\HtmlAgilityPack.pdb
+E:\him\URL\som\SOM\SOM\bin\HtmlAgilityPack.xml
+E:\him\URL\som\SOM\SOM\obj\Debug\SOM.csproj.AssemblyReference.cache

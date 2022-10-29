@@ -1,0 +1,873 @@
+﻿using SOM.Classes;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
+using System.Linq;
+using System.Web;
+using System.Web.UI;
+using System.Web.UI.WebControls;
+
+namespace SOM
+{
+    public partial class View_Cart : System.Web.UI.Page
+    {
+        public static DataTable ProductPackagingDDL(string strProductID)
+        {
+            try
+            {
+                DataSet dsResult = new DataSet();
+                DataTable dt = new DataTable();
+                using (SqlConnection Con = Connection.GetConnection())
+                {
+                    if (Con.State != ConnectionState.Open)
+                        Con.Open();
+
+                    string strQuery = "select '0' as ProductPackagingID,'0' as ProductID,'-- Packages List --' as WeightInGrams, '0' as MRP, '0' as Discount,'0' as RecommendedPack,'0' as InStock,'0' as IsActive UNION SELECT ProductPackagingID, ProductID, CONVERT(varchar(10), WeightInGrams) as WeightInGrams, CONVERT(varchar(10), MRP) as MRP, Discount, RecommendedPack, InStock, IsActive FROM MastProductPackaging WHERE ProductID = @ProductID";
+                    //+"AND ProductPackagingID = @ProductPackagingID";
+
+
+                    using (SqlCommand cmd = new SqlCommand(strQuery, Con))
+                    {
+                        cmd.Parameters.AddWithValue("@ProductID", strProductID);
+                        //cmd.Parameters.AddWithValue("@ProductPackagingID", strProductPackagingID);
+
+                        using (SqlDataAdapter adp = new SqlDataAdapter(cmd))
+                        {
+                            adp.Fill(dsResult);
+                        }
+                    }
+
+
+                    if (Con.State != ConnectionState.Closed)
+                        Con.Close();
+
+                    if (dsResult == null || dsResult.Tables.Count == 0)
+                        return null;
+                    else
+                        return dsResult.Tables[0];
+                }
+            }
+            catch (Exception ex)
+            {
+                return null;
+                
+            }
+            
+
+
+        }
+
+
+        private static DataTable dtSelectedProducts = new DataTable();
+        private static DataTable DataGetProducts = new DataTable();
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            try
+            {
+                if (Convert.ToInt32(Session["CustomerID"]) == 0 || Convert.ToString(Session["CustomerID"]) == null)
+                {
+                    Response.Redirect("~/Login.aspx");
+                }
+                Session["URL"] = "~/View-Cart.aspx";
+                if (!IsPostBack)
+                {
+                    DataGetProducts.Clear();
+                    if (DataGetProducts.Rows.Count != Products.cartData.Rows.Count)
+                    {
+                        for (int i = 0; i < Products.cartData.Rows.Count; i++)
+                        {
+                            dtSelectedProducts = DataViewer.ViewCart(Convert.ToString(Products.cartData.Rows[i]["ItemID"]));
+                            DataGetProducts.Merge(dtSelectedProducts);
+                        }
+                        dgvMyCart.DataSource = DataGetProducts;
+                        dgvMyCart.DataBind();
+                    }
+                }
+
+                if (DataGetProducts.Rows.Count != Products.cartData.Rows.Count)
+                {
+                    DataGetProducts.Clear();
+                    for (int i = 0; i < Products.cartData.Rows.Count; i++)
+                    {
+                        dtSelectedProducts = DataViewer.ViewCart(Convert.ToString(Products.cartData.Rows[i]["ItemID"]));
+                        DataGetProducts.Merge(dtSelectedProducts);
+                    }
+                    dgvMyCart.DataSource = DataGetProducts;
+                    dgvMyCart.DataBind();
+                }
+                int ils = dgvMyCart.Rows.Count;
+                if (DataGetProducts.Rows.Count == 0)
+                    lblNoData.Visible = true;
+                else
+                    lblNoData.Visible = false;
+                lblItemsCount.Text = Convert.ToString(Products.intItems) + " Items";
+                lblTotalAmount.Text = "Rs. "+string.Format("{0:0.00}",Products.dblTotalAmount);
+            }
+            catch (Exception ex)
+            {
+                lblError.Text = ex.ToString();
+                return;
+            }
+        }
+
+        protected void dgvMyCart_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            if (e.CommandName == "AddItem")
+            {
+                GridViewRow gvr = (GridViewRow)(((Button)e.CommandSource).NamingContainer);
+
+                RowIndex = gvr.RowIndex;
+            }
+            if (e.CommandName == "RemoveItem")
+            {
+                GridViewRow gvr = (GridViewRow)(((Button)e.CommandSource).NamingContainer);
+
+                RowIndex = gvr.RowIndex;
+            }
+        }
+        public static int strQty = 0;
+
+        protected void dgvMyCart_RowDataBound(object sender, GridViewRowEventArgs e)
+        {
+            try
+            {
+                foreach (TableCell tc in e.Row.Cells)
+                {
+                    tc.BorderStyle = BorderStyle.None;
+                }
+                int rowIndex = e.Row.RowIndex;
+                if (rowIndex != -1)
+                {
+                    DataTable dtPackaging = ProductPackagingDDL(Convert.ToString(DataGetProducts.Rows[rowIndex]["ProductID"]));
+                    Label lblQtyAndRate = (Label)e.Row.FindControl("lblQtyAndRate");
+                    dtPackaging.Columns.Add(new DataColumn("W&P"));
+                    for (int count = 0; count < dtPackaging.Rows.Count; count++)
+                    {
+                        if (count == 0)
+                        {
+                            dtPackaging.Rows[count]["W&P"] = dtPackaging.Rows[count]["WeightInGrams"];
+                            continue;
+                        }
+                        if (Convert.ToInt32(dtPackaging.Rows[count]["WeightInGrams"]) < 1000)
+                        {
+                            dtPackaging.Rows[count]["W&P"] = Convert.ToString(dtPackaging.Rows[count]["WeightInGrams"]) + " g. - Rs. " + Convert.ToString(dtPackaging.Rows[count]["MRP"]);
+                        }
+                        else
+                        {
+                            dtPackaging.Rows[count]["W&P"] = Convert.ToDouble(Convert.ToInt32(dtPackaging.Rows[count]["WeightInGrams"]) / 1000) + " kg. - Rs. " + Convert.ToString(dtPackaging.Rows[count]["MRP"]);
+
+                        }
+
+                    }
+                    DropDownList ddlPackaging = (DropDownList)e.Row.FindControl("ddlPackaging");
+                    ddlPackaging.DataSource = dtPackaging;
+                    
+                    ddlPackaging.DataTextField = Convert.ToString(dtPackaging.Columns["W&P"]);
+                    ddlPackaging.DataValueField = Convert.ToString(dtPackaging.Columns["ProductPackagingID"]);
+                    ddlPackaging.DataBind();
+                    ddlPackaging.Items.FindByValue(Products.cartData.Rows[rowIndex]["ProductPackagingID"].ToString()).Selected = true;
+                    int index = ddlPackaging.SelectedIndex;
+                    
+
+                    double amt = Convert.ToDouble(Products.cartData.Rows[rowIndex]["PriceParQty"]);
+                    lblQtyAndRate.Text = Products.cartData.Rows[rowIndex]["qty"].ToString()+" / Rs. "+ string.Format("{0:0.00}", amt);
+                    string[] qty = lblQtyAndRate.Text.Split('/');
+                    int intqty = Convert.ToInt32(qty[0]);
+
+                    //if (intqty <= 0)
+                    //{
+                    //    Button btnRemoveProduct = (Button)e.Row.FindControl("btnRemoveProduct");
+                    //    btnRemoveProduct.Enabled = false;
+                    //}
+                    //else
+                    //{
+                    //    Button btnRemoveProduct = (Button)e.Row.FindControl("btnRemoveProduct");
+                    //    btnRemoveProduct.Enabled = true;
+                    //}
+                }
+            }
+            catch (Exception ex)
+            {
+                lblError.Text = ex.ToString();
+                lblError.CssClass = "error-messege";
+                return;
+            }
+        }
+
+
+        protected void btnAddProduct_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                Button btn = sender as Button;
+                btn.Enabled = false;
+                int add = Convert.ToInt32(btn.CommandArgument);
+                GridViewRow gvr = (GridViewRow)btn.NamingContainer;
+                RowIndex = gvr.RowIndex;
+                Label lblQtyAndRate = (Label)dgvMyCart.Rows[RowIndex].FindControl("lblQtyAndRate");
+                string[] lblText = lblQtyAndRate.Text.Split('/');
+                int qty = Convert.ToInt32(lblText[0]);
+
+                //Button btnRemoveProduct = (Button)row.FindControl("btnRemoveProduct");
+                if (Products.cartData.Rows.Count == 0)
+                {
+                    if (qty >= 0)
+                    {
+                        Button btnRemoveProduct = (Button)dgvMyCart.Rows[RowIndex].FindControl("btnRemoveProduct");
+                        DropDownList ddlPackaging = (DropDownList)dgvMyCart.Rows[RowIndex].FindControl("ddlPackaging");
+                        if (ddlPackaging.SelectedItem.Value == "0")
+                        {
+                            lblError.Text = "Please Select Package";
+                            lblError.CssClass = "error-messege";
+                            btn.Enabled = true;
+                            return;
+
+                        }
+                        else
+                        {
+                            lblError.Text = "";
+                            lblError.CssClass = "error-messege";
+
+                        }
+                        if (itemList.Count == 0)
+                        {
+                            itemList.Add(add);
+
+                        }
+                        else
+                        {
+                            if (!itemList.Contains(add))
+                            {
+                                itemList.Add(add);
+                            }
+                        }
+                        qty++;
+
+                        string strProductPackagingID = ddlPackaging.SelectedValue;
+
+                        string selectedText = ddlPackaging.SelectedItem.Text;
+                        string[] values = selectedText.Split('-');
+                        double value = Convert.ToDouble(values[1].Replace("Rs.", ""));
+                        double PricePerQty = qty * value;
+                        double dblDiscount = 0.00;
+                        DataRow dr =Products.cartData.NewRow();
+                        dr["ItemID"] = add;
+                        dr["ProductPackagingID"] = ddlPackaging.SelectedItem.Value;
+                        dr["Grams"] = values[0];
+                        dr["Value"] = value;
+                        dr["qty"] = qty;
+                        dr["PriceParQty"] = PricePerQty;
+                        dr["Discouunt"] = dblDiscount;
+                       Products.cartData.Rows.Add(dr);
+
+                        Session["strProductPackagingID"] =Products.cartData;
+
+                        lblQtyAndRate.Text = qty + " / Rs. " + string.Format("{0:0.00}", PricePerQty);
+                       Products.dblTotalAmount =Products.dblTotalAmount + value;
+                        btnRemoveProduct.Enabled = true;
+                        Products.intItems =Products.cartData.Rows.Count;
+                        lblItemsCount.Text = Convert.ToString(Products.intItems) + " Items";
+                        lblTotalAmount.Text = "Rs. " + string.Format("{0:0.00}",Products.dblTotalAmount);
+                        //UpdatePanel1.Update();
+                        //UpdatePanel updatePanel2 = (UpdatePanel)dgvMyCart.Rows[RowIndex].FindControl("UpdatePanel2");
+                        //updatePanel2.Update();
+                        //UpdatePanel3.Update();
+                        //UpdatePanel4.Update();
+                    }
+
+                }
+                else
+                {
+                    Button btnRemoveProduct = (Button)dgvMyCart.Rows[RowIndex].FindControl("btnRemoveProduct");
+                    DropDownList ddlPackaging = (DropDownList)dgvMyCart.Rows[RowIndex].FindControl("ddlPackaging");
+                    if (ddlPackaging.SelectedItem.Value == "0")
+                    {
+                        lblError.Text = "Please Select Package";
+                        btn.Enabled = true;
+                        lblError.CssClass = "error-messege";
+                        return;
+
+                    }
+                    else
+                    {
+                        lblError.Text = "";
+                        lblError.CssClass = "error-messege";
+
+                    }
+                    DataRow[] rows =Products.cartData.Select("ProductPackagingID =" + ddlPackaging.SelectedItem.Value);
+                    if (rows.Length > 0)
+                    {
+                        if (qty >= 0)
+                        {
+                            if (itemList.Count == 0)
+                            {
+                                itemList.Add(add);
+
+                            }
+                            else
+                            {
+                                if (!itemList.Contains(add))
+                                {
+                                    itemList.Add(add);
+                                }
+                            }
+                            qty++;
+
+                            string strProductPackagingID = ddlPackaging.SelectedValue;
+
+                            string selectedText = ddlPackaging.SelectedItem.Text;
+                            string[] values = selectedText.Split('-');
+                            double value = Convert.ToDouble(values[1].Replace("Rs.", ""));
+                            double PricePerQty = qty * value;
+                            double dblDiscount = 0.00;
+                            foreach (DataRow row in rows)
+                            {
+
+                                row["ItemID"] = add;
+                                row["ProductPackagingID"] = ddlPackaging.SelectedItem.Value;
+                                row["Grams"] = values[0];
+                                row["Value"] = value;
+                                row["qty"] = qty;
+                                row["PriceParQty"] = PricePerQty;
+                                row["Discouunt"] = dblDiscount;
+                               Products.cartData.AcceptChanges();
+                                row.SetModified();
+                                break;
+                            }
+                            Session["strProductPackagingID"] =Products.cartData;
+
+                            lblQtyAndRate.Text = qty + " / Rs. " + string.Format("{0:0.00}", PricePerQty);
+                           Products.dblTotalAmount =Products.dblTotalAmount + value;
+                            btnRemoveProduct.Enabled = true;
+                            Products.intItems =Products.cartData.Rows.Count;
+                            lblItemsCount.Text = Convert.ToString(Products.intItems) + " Items";
+                            lblTotalAmount.Text = "Rs. " + string.Format("{0:0.00}",Products.dblTotalAmount);
+                            //UpdatePanel1.Update();
+                            //UpdatePanel updatePanel2 = (UpdatePanel)dgvMyCart.Rows[RowIndex].FindControl("UpdatePanel2");
+                            //updatePanel2.Update();
+                            //UpdatePanel3.Update();
+                            //UpdatePanel4.Update();
+                        }
+                    }
+                    else
+                    {
+                        if (qty >= 0)
+                        {
+                            if (itemList.Count == 0)
+                            {
+                                itemList.Add(add);
+
+                            }
+                            else
+                            {
+                                if (!itemList.Contains(add))
+                                {
+                                    itemList.Add(add);
+                                }
+                            }
+                            qty++;
+
+                            string strProductPackagingID = ddlPackaging.SelectedValue;
+
+                            string selectedText = ddlPackaging.SelectedItem.Text;
+                            string[] values = selectedText.Split('-');
+                            double value = Convert.ToDouble(values[1].Replace("Rs.", ""));
+                            double PricePerQty = qty * value;
+                            double dblDiscount = 0.00;
+                            DataRow dr =Products.cartData.NewRow();
+                            dr["ItemID"] = add;
+                            dr["ProductPackagingID"] = ddlPackaging.SelectedItem.Value;
+                            dr["Grams"] = values[0];
+                            dr["Value"] = value;
+                            dr["qty"] = qty;
+                            dr["PriceParQty"] = PricePerQty;
+                            dr["Discouunt"] = dblDiscount;
+                           Products.cartData.Rows.Add(dr);
+
+                            Session["strProductPackagingID"] =Products.cartData;
+
+                            lblQtyAndRate.Text = qty + " / Rs. " + string.Format("{0:0.00}", PricePerQty);
+                           Products.dblTotalAmount =Products.dblTotalAmount + value;
+                            btnRemoveProduct.Enabled = true;
+                            Products.intItems =Products.cartData.Rows.Count;
+                            lblItemsCount.Text = Convert.ToString(Products.intItems) + " Items";
+                            lblTotalAmount.Text = "Rs. " + string.Format("{0:0.00}",Products.dblTotalAmount);
+                            //UpdatePanel1.Update();
+                            //UpdatePanel updatePanel2 = (UpdatePanel)dgvMyCart.Rows[RowIndex].FindControl("UpdatePanel2");
+                            //updatePanel2.Update();
+                            //UpdatePanel3.Update();
+                            //UpdatePanel4.Update();
+                        }
+                    }
+                }
+                btn.Enabled = true;
+            }
+            catch (Exception ex)
+            {
+                lblError.Text = ex.ToString();
+                lblError.CssClass = "error-messege";
+                return;
+            }
+        }
+        public static List<int> itemList = new List<int>();
+        protected void btnRemoveProduct_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                Button btn = sender as Button;
+                int add = Convert.ToInt32(btn.CommandArgument);
+                GridViewRow gvr = (GridViewRow)btn.NamingContainer;
+                RowIndex = gvr.RowIndex;
+                Label lblQtyAndRate = (Label)dgvMyCart.Rows[RowIndex].FindControl("lblQtyAndRate");
+                string[] lblText = lblQtyAndRate.Text.Split('/');
+                int qty = Convert.ToInt32(lblText[0]);
+
+                //Button btnRemoveProduct = (Button)row.FindControl("btnRemoveProduct");
+
+                if (Products.cartData.Rows.Count > 0)
+                {
+                    Button btnRemoveProduct = (Button)dgvMyCart.Rows[RowIndex].FindControl("btnRemoveProduct");
+                    DropDownList ddlPackaging = (DropDownList)dgvMyCart.Rows[RowIndex].FindControl("ddlPackaging");
+                    if (ddlPackaging.SelectedItem.Value == "0")
+                    {
+                        lblError.Text = "Please Select Package";
+                        btn.Enabled = true;
+                        lblError.CssClass = "error-messege";
+                        return;
+                    }
+                    else
+                    {
+                        lblError.Text = "";
+                        lblError.CssClass = "error-messege";
+                    }
+                    DataRow[] rows =Products.cartData.Select("ProductPackagingID =" + ddlPackaging.SelectedItem.Value);
+                    if (rows.Length > 0)
+                    {
+                        if (qty >= 1)
+                        {
+
+                            qty--;
+
+                            string strProductPackagingID = ddlPackaging.SelectedValue;
+
+                            string selectedText = ddlPackaging.SelectedItem.Text;
+                            string[] values = selectedText.Split('-');
+                            double value = Convert.ToDouble(values[1].Replace("Rs.", ""));
+                            double PricePerQty = qty * value;
+                            double dblDiscount = 0.00;
+                            foreach (DataRow row in rows)
+                            {
+
+                                row["ItemID"] = add;
+                                row["ProductPackagingID"] = ddlPackaging.SelectedItem.Value;
+                                row["Grams"] = values[0];
+                                row["Value"] = value;
+                                row["qty"] = qty;
+                                row["PriceParQty"] = PricePerQty;
+                                row["Discouunt"] = dblDiscount;
+                                Products.cartData.AcceptChanges();
+                                row.SetModified();
+                                break;
+                            }
+                            Session["strProductPackagingID"] = Products.cartData;
+
+                            lblQtyAndRate.Text = qty + " / Rs. " + string.Format("{0:0.00}", PricePerQty);
+
+                            if (qty == 0)
+                            {
+                                for (int i =Products.cartData.Rows.Count - 1; i >= 0; i--)
+                                {
+                                    DataRow dr =Products.cartData.Rows[i];
+                                    if (dr["qty"].ToString() == "0" && dr["ProductPackagingID"].ToString() == ddlPackaging.SelectedItem.Value.ToString())
+                                    {
+                                        dr.Delete();
+                                    }
+
+                                }
+                               Products.cartData.AcceptChanges();
+
+                            }
+
+                            if (qty <= 0)
+                            {
+                                if (qty == 0)
+                                {
+                                    if (itemList.Contains(add))
+                                    {
+                                        itemList.Remove(add);
+                                    }
+                                }
+                               Products.dblTotalAmount =Products.dblTotalAmount - value;
+                                Session["TotalBillAmount"] =Products.dblTotalAmount;
+                                btnRemoveProduct.Enabled = false;
+                                if (DataGetProducts.Rows.Count != Products.cartData.Rows.Count)
+                                {
+                                    DataGetProducts.Clear();
+                                    for (int i = 0; i < Products.cartData.Rows.Count; i++)
+                                    {
+                                        dtSelectedProducts = DataViewer.ViewCart(Convert.ToString(Products.cartData.Rows[i]["ItemID"]));
+                                        DataGetProducts.Merge(dtSelectedProducts);
+                                    }
+                                    dgvMyCart.DataSource = DataGetProducts;
+                                    dgvMyCart.DataBind();
+                                }
+                            }
+                            else
+                            {
+                               Products.dblTotalAmount =Products.dblTotalAmount - value;
+                                Session["TotalBillAmount"] =Products.dblTotalAmount;
+                                btnRemoveProduct.Enabled = true;
+                            }
+                           Products.intItems =Products.cartData.Rows.Count;
+                            Session["intItems"] =Products.intItems;
+                            lblItemsCount.Text = Convert.ToString(Products.intItems) + " Items";
+                            lblTotalAmount.Text = "Rs. " + string.Format("{0:0.00}",Products.dblTotalAmount);
+                            //UpdatePanel1.Update();
+                            //UpdatePanel updatePanel2 = (UpdatePanel)dgvProducts.Rows[RowIndex].FindControl("UpdatePanel2");
+                            //updatePanel2.Update();
+                            //UpdatePanel3.Update();
+                            //UpdatePanel4.Update();
+                        }
+                    }
+                    else
+                    {
+                        if (qty >= 1)
+                        {
+
+                            qty--;
+                            string strProductPackagingID = ddlPackaging.SelectedValue;
+
+                            string selectedText = ddlPackaging.SelectedItem.Text;
+                            string[] values = selectedText.Split('-');
+                            double value = Convert.ToDouble(values[1].Replace("Rs.", ""));
+                            double PricePerQty = qty * value;
+                            double dblDiscount = 0.00;
+                            DataRow dr =Products.cartData.NewRow();
+                            dr["ItemID"] = add;
+                            dr["ProductPackagingID"] = ddlPackaging.SelectedItem.Value;
+                            dr["Grams"] = values[0];
+                            dr["Value"] = value;
+                            dr["qty"] = qty;
+                            dr["PriceParQty"] = PricePerQty;
+                            dr["Discouunt"] = dblDiscount;
+                           Products.cartData.Rows.Add(dr);
+
+                            Session["strProductPackagingID"] =Products.cartData;
+
+                            lblQtyAndRate.Text = qty + " / Rs. " + string.Format("{0:0.00}", PricePerQty);
+
+                            if (qty == 0)
+                            {
+                                for (int i =Products.cartData.Rows.Count - 1; i >= 0; i--)
+                                {
+                                    DataRow drs =Products.cartData.Rows[i];
+                                    if (drs["qty"].ToString() == "0" && drs["ProductPackagingID"].ToString() == ddlPackaging.SelectedItem.Value.ToString())
+                                    {
+                                        drs.Delete();
+                                    }
+
+                                }
+                               Products.cartData.AcceptChanges();
+
+                            }
+
+                            if (qty <= 0)
+                            {
+                                if (qty == 0)
+                                {
+                                    if (itemList.Contains(add))
+                                    {
+                                        itemList.Remove(add);
+                                    }
+                                }
+                               Products.dblTotalAmount =Products.dblTotalAmount - value;
+                                Session["TotalBillAmount"] =Products.dblTotalAmount;
+                                btnRemoveProduct.Enabled = false;
+                                if (DataGetProducts.Rows.Count != Products.cartData.Rows.Count)
+                                {
+                                    DataGetProducts.Clear();
+                                    for (int i = 0; i < Products.cartData.Rows.Count; i++)
+                                    {
+                                        dtSelectedProducts = DataViewer.ViewCart(Convert.ToString(Products.cartData.Rows[i]["ItemID"]));
+                                        DataGetProducts.Merge(dtSelectedProducts);
+                                    }
+                                    dgvMyCart.DataSource = DataGetProducts;
+                                    dgvMyCart.DataBind();
+                                }
+                            }
+                            else
+                            {
+                               Products.dblTotalAmount =Products.dblTotalAmount - value;
+                                Session["TotalBillAmount"] =Products.dblTotalAmount;
+                                btnRemoveProduct.Enabled = true;
+                            }
+                           Products.intItems =Products.cartData.Rows.Count;
+                            Session["intItems"] =Products.intItems;
+                            lblItemsCount.Text = Convert.ToString(Products.intItems) + " Items";
+                            lblTotalAmount.Text = "Rs. " + string.Format("{0:0.00}",Products.dblTotalAmount);
+                            //UpdatePanel1.Update();
+                            //UpdatePanel updatePanel2 = (UpdatePanel)dgvProducts.Rows[RowIndex].FindControl("UpdatePanel2");
+                            //updatePanel2.Update();
+                            //UpdatePanel3.Update();
+                            //UpdatePanel4.Update();
+                        }
+                    }
+                }
+                else
+                {
+                    lblError.Text = "There is error in something please Try after some time";
+                    lblError.CssClass = "error-messege";
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                lblError.Text = ex.ToString();
+                lblError.CssClass = "error-messege";
+                return;
+            }
+        }
+
+        protected void btnPlaceOrder_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                int intSuccess = 0;
+
+                string strCutomerID = Session["CustomerID"] as string;
+                if (strCutomerID == "" || strCutomerID == "0" || string.IsNullOrEmpty(strCutomerID))
+                {
+                    lblError.Text = "You can't place order without Login";
+                    lblError.Focus();
+                    return;
+                }
+
+                if (lblTotalAmount.Text.Trim() == "" || string.IsNullOrEmpty(lblTotalAmount.Text.Trim()))
+                {
+                    lblError.Text = "Please Select Item to Buy!!";
+                    lblError.Focus();
+                    return;
+                }
+
+                if (lblItemsCount.Text.Trim() == "" || string.IsNullOrEmpty(lblItemsCount.Text.Trim()))
+                {
+                    lblError.Text = "Please Select Item To Buy!!";
+                    lblError.Focus();
+                    return;
+                }
+
+                if (lblItemsCount.Text == "0 Items" || lblTotalAmount.Text == "Rs. 0.00")
+                {
+                    lblError.Text = "Please Select Item To Buy!!";
+                    lblError.Focus();
+                    return;
+                }
+
+                if (lblTotalAmount.Text != "Rs. 0.00")
+                {
+                    if (lblItemsCount.Text == "0 Items")
+                    {
+                        lblError.Text = "There is error in someting! Please relogin and try again!";
+                        lblError.Focus();
+                        return;
+                    }
+                }
+
+                if(Products.cartData.Rows.Count == 0 || Products.cartData == null)
+                {
+                    lblError.Text = "Please Select Item To Buy!!";
+                    lblError.Focus();
+                    return;
+                }
+
+                int intOrder = DataHandler.addOrder(Session["CustomerID"] as string,Products.dblTotalAmount.ToString(), "False", "");
+                if (intOrder > 0)
+                {
+                    for (int i = 0; i <Products.cartData.Rows.Count; i++)
+                    {
+                        double dblTotalAmountOfProduct = Convert.ToDouble(Products.cartData.Rows[i]["Value"]) * Convert.ToDouble(Products.cartData.Rows[i]["qty"]);
+                        int intresult = DataHandler.addOrderDetails(intOrder, Convert.ToInt32(Products.cartData.Rows[i]["ProductPackagingID"]), Convert.ToInt32(Products.cartData.Rows[i]["qty"]), Convert.ToDouble(Products.cartData.Rows[i]["Value"]), Convert.ToDouble(Products.cartData.Rows[i]["Discouunt"]));
+
+
+                        if (intresult > 0)
+                        {
+                            intSuccess++;
+                            lblError.Text = "Order Placed!!";
+                            lblError.CssClass = "success-messege";
+
+                        }
+                        else
+                        {
+                            lblError.Text = "There is error while placing Order from";
+                            lblError.CssClass = "error-messege";
+                            return;
+
+                        }
+                    }
+                }
+
+                if (intSuccess ==Products.cartData.Rows.Count)
+                {
+                    Products.cartData.Clear();
+                    Products.itemList.Clear();
+                    dtSelectedProducts.Clear();
+                    DataGetProducts.Clear();
+                    for (int i = 0; i < Products.cartData.Rows.Count; i++)
+                    {
+                        dtSelectedProducts = DataViewer.ViewCart(Convert.ToString(Products.cartData.Rows[i]["ItemID"]));
+                        DataGetProducts.Merge(dtSelectedProducts);
+                    }
+                    dgvMyCart.DataSource = DataGetProducts;
+                    dgvMyCart.DataBind();
+                    
+                    Products.intItems = 0;
+                    Session["intItems"] = Products.intItems;
+
+                    Products.dblTotalAmount = 0.00;
+                    Session["TotalBillAmount"] = Products.dblTotalAmount;
+                    Response.Redirect("~/SuccessOrder.aspx");
+                }
+            }
+            catch (Exception ex)
+            {
+                lblError.Text = ex.ToString();
+                lblError.CssClass = "error-messege";
+                return;
+            }
+        }
+        //public static int Products.intItems = 0;
+        //public static doubleProducts.dblTotalAmount = 0.00;
+        private int RowIndex = 0;
+
+        protected void txtSearch_TextChanged(object sender, EventArgs e)
+        {
+            try
+            {
+                DataGetProducts = DataViewer.filterProducts(txtSearch.Text.Trim());
+                dgvMyCart.DataSource = DataGetProducts;
+                dgvMyCart.DataBind();
+            }
+            catch (Exception ex)
+            {
+                lblError.Text = ex.ToString();
+                lblError.CssClass = "error-messege";
+                return;
+            }
+            
+        }
+
+        protected void ddlPackaging_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            try
+            {
+                DropDownList ddl = (DropDownList)sender;
+                GridViewRow gvr = (GridViewRow)ddl.NamingContainer;
+                RowIndex = gvr.RowIndex;
+                DropDownList ddlPackaging = (DropDownList)dgvMyCart.Rows[RowIndex].FindControl("ddlPackaging");
+                Label lblQtyAndRate = (Label)dgvMyCart.Rows[RowIndex].FindControl("lblQtyAndRate");
+                DataRow[] rows = Products.cartData.Select("ProductPackagingID =" + ddlPackaging.SelectedItem.Value);
+                Button btnRemoveProduct = (Button)dgvMyCart.Rows[RowIndex].FindControl("btnRemoveProduct");
+
+                if (rows.Length > 0)
+                {
+                    double ppq = Convert.ToDouble(rows[0].ItemArray[5]);
+                    lblQtyAndRate.Text = rows[0].ItemArray[4] + " / Rs. " + string.Format("{0:0.00}", ppq);
+                }
+                else
+                {
+                    lblQtyAndRate.Text = "0 / Rs. 0.00";
+                }
+                string[] values = lblQtyAndRate.Text.Split('/');
+                int q = Convert.ToInt32(values[0]);
+
+                if (q > 0)
+                {
+                    btnRemoveProduct.Enabled = true;
+                }
+                else
+                {
+                    btnRemoveProduct.Enabled = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                lblError.Text = ex.ToString();
+                lblError.CssClass = "error-messege";
+                return;
+            }
+        }
+
+        protected void lnkViewProducts_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                Session["intItems"] = Products.intItems;
+                Session["TotalBillAmount"] = Products.dblTotalAmount;
+                Response.Redirect("~/Products.aspx");
+            }
+            catch (Exception ex)
+            {
+                lblError.Text = ex.ToString();
+                lblError.CssClass = "error-messege";
+                return;
+            }
+        }
+
+        
+
+        protected void lnkGoProducts_Click(object sender, EventArgs e)
+        {
+            Response.Redirect("~/Products.aspx");
+        }
+
+        protected void lnkGoHome_Click(object sender, EventArgs e)
+        {
+            Response.Redirect("~/Home.aspx");
+        }
+
+        
+
+        protected void lnkGoToProductsPage_Click(object sender, EventArgs e)
+        {
+            Session["intItems"] = Products.intItems;
+            Session["TotalBillAmount"] = Products.dblTotalAmount;
+            Response.Redirect("~/Products.aspx");
+        }
+
+        protected void btnYes_Click(object sender, EventArgs e)
+        {
+            //if(pTag.InnerText.Contains("Are you sure do you want to Logout?"))
+            //{
+            //    Session.RemoveAll();
+            //    Response.Redirect("~/Login.aspx");
+            //}
+            
+            //if(pTag.InnerText.Contains("Do you want to Login?")) //if user opens link without registration or login
+            //{
+            //    Response.Redirect("~/Login.aspx");
+            //}
+        }
+
+        protected void btnNo_Click(object sender, EventArgs e)
+        {
+            //modal2.Visible = false;
+        }
+
+        protected void btnLogout_Click(object sender, EventArgs e)
+        {
+            Session.RemoveAll();
+            Response.Redirect("~/Login.aspx");
+            //if (Session["strProductPackagingID"] as DataTable == null)
+            //{
+            //    Session.RemoveAll();
+            //    Response.Redirect("~/Login.aspx");
+            //}
+            //else
+            //{
+            //    modal2.Visible = true;
+
+            //}
+        }
+    }
+}
